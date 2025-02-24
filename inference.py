@@ -55,9 +55,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    clip_model = "./weights/RN50.pt"
+    clip_model = "./weights/RN50.pt" 
     clip_weights = "./weights/CLIB-FIQA_R50.pth"
-    image_path = "./samples/1.jpg"
+    image_path = "./samples/angle_1.0_dist_12 Background Removed.00.png"
+    #image_path = '/Volumes/veronicabossio/f1.png'
 
     model = backboneSet(clip_model)
     model = load_net_param(model, clip_weights)
