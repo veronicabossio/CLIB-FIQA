@@ -11,7 +11,8 @@ import torchvision.transforms as T
 # Import model functions
 from model import clip
 from model.models import convert_weights
-from utilities import dist_to_score
+#from utilities import dist_to_score
+from utilities import *
 
 
 # Define Categories
@@ -35,14 +36,21 @@ occ_map = {i: v for i, v in enumerate(occ_list)}
 ill_map = {i: v for i, v in enumerate(ill_list)}
 exp_map = {i: v for i, v in enumerate(exp_list)}
 
+def backboneSet(clip_model):
+    net, _ = clip.load(clip_model, device='cuda', jit=False)
+    return net
 # Load Model
 def load_clip_model():
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     clip_model_path = "./weights/RN50.pt"
     clip_weights = "./weights/CLIB-FIQA_R50.pth"
-    model = clip.load(clip_model_path, device='cuda', jit=False)[0]
-    model = convert_weights(model)
-    model.load_state_dict(torch.load(clip_weights, map_location="cuda"))
-    model.eval()
+    model = backboneSet(clip_model_path)
+    model = load_net_param(model, clip_weights)
+    # model = clip.load(clip_model_path, device='cuda', jit=False)[0]
+    # model = convert_weights(model)
+    # model.load_state_dict(torch.load(clip_weights, map_location="cuda"))
+    # model.eval()
     return model
 
 # Preprocessing Function
@@ -55,23 +63,31 @@ def img_tensor(img_path):
     ])
     return transform(img).unsqueeze(0)
 
+@torch.no_grad()
+def do_batch(model, x, text):
+    batch_size = x.size(0)
+    x = x.view(-1, x.size(1), x.size(2), x.size(3))
+    logits_per_image, logits_per_text = model.forward(x, text)
+    logits_per_image = logits_per_image.view(batch_size, -1)
+    logits_per_text = logits_per_text.view(-1, batch_size)
+    logits_per_image = F.softmax(logits_per_image, dim=1)
+    logits_per_text = F.softmax(logits_per_text, dim=1)
+    return logits_per_image, logits_per_text
+
 model = load_clip_model()
 # Inference Function
 @torch.no_grad()
 def analyze_image(image_path):
     tensor_data = img_tensor(image_path).cuda()
-    logits_per_image, _ = model(tensor_data, joint_texts)
-    
+    logits_per_image, _, = do_batch(model, tensor_data, joint_texts)
     logits_per_image = logits_per_image.view(-1, len(blur_list), len(occ_list), len(pose_list), len(exp_list), len(ill_list), len(quality_list))
-
-    logits_quality = logits_per_image.sum((1, 1, 1, 1, 1))
-    logits_blur = torch.argmax(logits_per_image.sum((6, 5, 4, 3, 2)), dim=1).cpu().numpy().squeeze(0)
-    logits_occ = torch.argmax(logits_per_image.sum((6, 5, 4, 3, 1)), dim=1).cpu().numpy().squeeze(0)
-    logits_pose = torch.argmax(logits_per_image.sum((6, 5, 4, 2, 1)), dim=1).cpu().numpy().squeeze(0)
-    logits_exp = torch.argmax(logits_per_image.sum((6, 5, 3, 2, 1)), dim=1).cpu().numpy().squeeze(0)
-    logits_ill = torch.argmax(logits_per_image.sum((6, 4, 3, 2, 1)), dim=1).cpu().numpy().squeeze(0)
-    
-    quality_preds = dist_to_score(logits_quality).cpu().numpy().squeeze(0)
+    logits_quality  = logits_per_image.sum(1).sum(1).sum(1).sum(1).sum(1)
+    logits_blur     = torch.max(logits_per_image.sum(6).sum(5).sum(4).sum(3).sum(2), dim=1)[1].cpu().detach().numpy().squeeze(0)
+    logits_occ      = torch.max(logits_per_image.sum(6).sum(5).sum(4).sum(3).sum(1), dim=1)[1].cpu().detach().numpy().squeeze(0)
+    logits_pose     = torch.max(logits_per_image.sum(6).sum(5).sum(4).sum(2).sum(1), dim=1)[1].cpu().detach().numpy().squeeze(0)
+    logits_exp      = torch.max(logits_per_image.sum(6).sum(5).sum(3).sum(2).sum(1), dim=1)[1].cpu().detach().numpy().squeeze(0)
+    logits_ill      = torch.max(logits_per_image.sum(6).sum(4).sum(3).sum(2).sum(1), dim=1)[1].cpu().detach().numpy().squeeze(0)
+    quality_preds = dist_to_score(logits_quality).cpu().detach().numpy().squeeze(0)
 
     # Get expression probability
     logits_exp_values = logits_per_image.sum((6, 5, 3, 2, 1))
@@ -87,11 +103,16 @@ def analyze_image(image_path):
         "pose": pose_map[int(logits_pose)],
         "expression_score": exaggeration_score,
         "expression": exp_map[int(logits_exp)],
+        'lighting': ill_map[int(logits_ill)],
         "message": output_msg
     }
 
+def image_passes_filter(image_path, model, quality_thresh=76, pose_filter='frontal'):
+    results = analyze_image(image_path, model)
+    return results["quality"] >= quality_thresh and results["pose"] == pose_filter
+
 # Batch Filtering Function
-def batch_filter_images(input_dir, output_dir, model, quality_thresh=None, pose_filter=None, expression_thresh=None):
+def batch_filter_images(input_dir, output_dir, quality_thresh=None, pose_filter=None, expression_thresh=None):
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +121,7 @@ def batch_filter_images(input_dir, output_dir, model, quality_thresh=None, pose_
         if not image_path.is_file():
             continue
 
-        results = analyze_image(image_path, model)
+        results = analyze_image(image_path)
 
         # Apply filtering conditions
         if (quality_thresh is not None and results["quality"] < quality_thresh):
