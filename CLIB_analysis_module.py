@@ -107,9 +107,10 @@ def analyze_image(image_path):
         "message": output_msg
     }
 
-def image_passes_filter(image_path, model, quality_thresh=76, pose_filter='frontal'):
-    results = analyze_image(image_path, model)
-    return results["quality"] >= quality_thresh and results["pose"] == pose_filter
+def face_passes_filters(image_path, quality_thresh=76, pose_filter='frontal'):
+    results = analyze_image(image_path)
+    print(results['quality'], results['pose'])
+    return results["quality"] >= quality_thresh and results["pose"] == pose_filter, results['quality'], results['pose']
 
 # Batch Filtering Function
 def batch_filter_images(input_dir, output_dir, quality_thresh=None, pose_filter=None, expression_thresh=None):
