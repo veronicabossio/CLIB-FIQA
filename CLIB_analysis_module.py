@@ -55,7 +55,10 @@ def load_clip_model():
 
 # Preprocessing Function
 def img_tensor(img_path):
-    img = Image.open(img_path).convert("RGB")
+    if isinstance(img_path, str):
+        img = Image.open(img_path).convert("RGB")
+    else:
+        img = img_path
     transform = T.Compose([
         T.Resize([224, 224]),
         T.ToTensor(),
@@ -78,6 +81,7 @@ model = load_clip_model()
 # Inference Function
 @torch.no_grad()
 def analyze_image(image_path):
+    
     tensor_data = img_tensor(image_path).cuda()
     logits_per_image, _, = do_batch(model, tensor_data, joint_texts)
     logits_per_image = logits_per_image.view(-1, len(blur_list), len(occ_list), len(pose_list), len(exp_list), len(ill_list), len(quality_list))
@@ -97,7 +101,7 @@ def analyze_image(image_path):
     # Create summary message
     output_msg = f"A photo of a [{blur_map[int(logits_blur)]}], [{occ_map[int(logits_occ)]}], and [{pose_map[int(logits_pose)]}] face with [{exp_map[int(logits_exp)]}] under [{ill_map[int(logits_ill)]}]"
     
-    return {
+    results = {
         "image_path": str(image_path),
         "quality": quality_preds,
         "pose": pose_map[int(logits_pose)],
@@ -106,11 +110,22 @@ def analyze_image(image_path):
         'lighting': ill_map[int(logits_ill)],
         "message": output_msg
     }
+    return results
 
-def face_passes_filters(image_path, quality_thresh=76, pose_filter='frontal'):
+# def face_passes_filters(image_path, quality_thresh=76, pose_filter=['frontal', 'slight angle']):
+#     results = analyze_image(image_path)
+#     print(results['quality'], results['pose'])
+#     passes_pose = pose_filter is not None and str(results["pose"]) in pose_filter
+#     return results["quality"] >= quality_thresh and passes_pose
+
+def face_passes_filters(image_path, quality_thresh=0.77, pose_filter=['frontal', 'slight angle']):
     results = analyze_image(image_path)
-    print(results['quality'], results['pose'])
-    return results["quality"] >= quality_thresh and results["pose"] == pose_filter, results['quality'], results['pose']
+    #print(results['quality'], results['pose'])
+
+    # Ensure pose_filter is a list and check if the result is in it
+    passes_pose = pose_filter is None or str(results["pose"]) in pose_filter
+
+    return results["quality"] >= quality_thresh and passes_pose
 
 # Batch Filtering Function
 def batch_filter_images(input_dir, output_dir, quality_thresh=None, pose_filter=None, expression_thresh=None):
