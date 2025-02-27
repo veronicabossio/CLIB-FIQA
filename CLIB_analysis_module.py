@@ -55,7 +55,7 @@ def load_clip_model():
 
 # Preprocessing Function
 def img_tensor(img_path):
-    if isinstance(img_path, str):
+    if (isinstance(img_path, str)) or (isinstance(img_path, Path)):
         img = Image.open(img_path).convert("RGB")
     else:
         img = img_path
@@ -135,16 +135,22 @@ def batch_filter_images(input_dir, output_dir, quality_thresh=None, pose_filter=
 
     for image_path in input_dir.iterdir():
         if not image_path.is_file():
+            print(f"Skipping: {image_path.name} - Not a file")
             continue
 
         results = analyze_image(image_path)
 
         # Apply filtering conditions
         if (quality_thresh is not None and results["quality"] < quality_thresh):
+            print(f"Skipping: {image_path.name} - Quality below threshold")
             continue
-        if (pose_filter is not None and results["pose"] != pose_filter):
+        # if (pose_filter is not None and results["pose"] != pose_filter):
+        #     print(f"Skipping: {image_path.name} - Pose not in filter")
+        if ((pose_filter is not None) and (results["pose"] not in pose_filter)):
+            print(f"Skipping: {image_path.name} - Pose not in filter")
             continue
         if (expression_thresh is not None and results["expression_score"] > expression_thresh):
+            print(f"Skipping: {image_path.name} - Exaggerated expression")
             continue
 
         # Copy the filtered image
