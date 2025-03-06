@@ -127,6 +127,9 @@ def face_passes_filters(image_path, quality_thresh=0.77, pose_filter=['frontal',
 
     return results["quality"] >= quality_thresh and passes_pose
 
+
+#from glasses_detector import GlassesClassifier
+
 # Batch Filtering Function
 def batch_filter_images(input_dir, output_dir, quality_thresh=None, pose_filter=None, expression_thresh=None):
     input_dir = Path(input_dir)
@@ -153,26 +156,19 @@ def batch_filter_images(input_dir, output_dir, quality_thresh=None, pose_filter=
             print(f"Skipping: {image_path.name} - Exaggerated expression")
             continue
 
+        # eyeglasses_classifier = GlassesClassifier(size="small", kind="eyeglasses", device="cuda")
+        # sunglasses_classifier = GlassesClassifier(size="small", kind="sunglasses", device="cuda")
+        # eyeglasses_present = eyeglasses_classifier.predict(image_path)
+        # sunglasses_present = sunglasses_classifier.predict(image_path)
+
+        # if (eyeglasses_present == 'present') or (sunglasses_present == 'present'):
+        #     print(f"Skipping: {image_path.name} - Glasses detected")
+        #     continue
+
         # Copy the filtered image
         shutil.copy(image_path, output_dir / image_path.name)
         print(f"Copied: {image_path.name} - {results['message']}")
+        print("Current device:", torch.cuda.current_device())
+        print("Device name:", torch.cuda.get_device_name(torch.cuda.current_device()))
 
     print(f"Filtering complete. Processed images saved in {output_dir}")
-
-# Example Usage
-# if __name__ == "__main__":
-#     model = load_clip_model()
-
-#     # **Test a single image**
-#     image_summary = analyze_image("/path/to/face.jpg", model)
-#     print(image_summary)
-
-#     # **Batch filtering with multiple conditions**
-#     batch_filter_images(
-#         input_dir="/home/veronicabossio/face_datasets/filter_test_neighbors",
-#         output_dir="/home/veronicabossio/face_datasets/filtered_faces",
-#         model=model,
-#         quality_thresh=0.78,    # Only keep images with quality > 0.78
-#         pose_filter="frontal",  # Only keep frontal images
-#         expression_thresh=0.3   # Remove exaggerated expressions above 0.3 probability
-#     )
