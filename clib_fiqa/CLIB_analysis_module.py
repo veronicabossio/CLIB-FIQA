@@ -8,11 +8,44 @@ from itertools import product
 from PIL import Image
 import torchvision.transforms as T
 
-# Import model functions
-from model import clip
-from model.models import convert_weights
-#from utilities import dist_to_score
-from utilities import *
+# #-------------- Import CLIP model
+# # Import model functions
+# from model import clip
+# from model.models import convert_weights
+# #from utilities import dist_to_score
+# from utilities import *
+
+# import sys
+
+# # Adjust this to the *absolute* path of your CLIB filtering module
+# clib_module_path = Path("/home/veronicabossio/CLIB-FIQA/")  # example
+# clib_weights_path = Path("/home/veronicabossio/CLIB-FIQA/weights/")  # example
+
+# # Add to sys.path so Python can import it
+# sys.path.append(str(clib_module_path))
+# sys.path.append(str(clib_weights_path))
+# ---------------------
+
+from pathlib import Path
+# _ROOT    = Path(__file__).resolve().parent          # …/CLIB-FIQA
+# _WEIGHTS = _ROOT / "weights"                        # PATH OBJECTS!
+
+import os
+_WEIGHTS = Path(os.path.dirname(__file__)) / "weights"
+clip_model_path = _WEIGHTS / "RN50.pt"
+clip_weights    = _WEIGHTS / "CLIB-FIQA_R50.pth"
+
+import torch, torch.nn.functional as F
+from itertools import product
+from PIL import Image
+import torchvision.transforms as T
+
+# all intra‑package imports use absolute dots
+# import clib_fiqa            # root package
+# from clib_fiqa import CLIB_analysis_module as clib
+from clib_fiqa.model import clip
+from clib_fiqa.model.models import convert_weights
+from clib_fiqa.utilities import dist_to_score, load_net_param    # ← if defined there
 
 
 # Define Categories
@@ -39,19 +72,40 @@ exp_map = {i: v for i, v in enumerate(exp_list)}
 def backboneSet(clip_model):
     net, _ = clip.load(clip_model, device='cuda', jit=False)
     return net
-# Load Model
-def load_clip_model():
+# Load Model OLD ------------------
+# def load_clip_model():
+#     torch.backends.cudnn.deterministic = True
+#     torch.backends.cudnn.benchmark = False
+#     clip_model_path = "./weights/RN50.pt"
+#     clip_weights = "./weights/CLIB-FIQA_R50.pth"
+#     model = backboneSet(clip_model_path)
+#     model = load_net_param(model, clip_weights)
+#     model = clip.load(clip_model_path, device='cuda', jit=False)[0]
+#     model = convert_weights(model)
+#     model.load_state_dict(torch.load(clip_weights, map_location="cuda"))
+#     model.eval()
+#     return model
+# -----------------
+
+# -------------------  load_clip_model  ------------------------------
+def load_clip_model() -> torch.nn.Module:
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    clip_model_path = "./weights/RN50.pt"
-    clip_weights = "./weights/CLIB-FIQA_R50.pth"
-    model = backboneSet(clip_model_path)
-    model = load_net_param(model, clip_weights)
-    # model = clip.load(clip_model_path, device='cuda', jit=False)[0]
-    # model = convert_weights(model)
-    # model.load_state_dict(torch.load(clip_weights, map_location="cuda"))
-    # model.eval()
+    torch.backends.cudnn.benchmark     = False
+
+    clip_model_path = _WEIGHTS / "RN50.pt"
+    clip_weights    = _WEIGHTS / "CLIB-FIQA_R50.pth"
+
+    if not clip_model_path.is_file():
+        raise FileNotFoundError(f"RN50.pt not found at {clip_model_path}")
+    if not clip_weights.is_file():
+        raise FileNotFoundError(f"CLIB-FIQA_R50.pth not found at {clip_weights}")
+
+    model = clip.load(str(clip_model_path), device="cuda", jit=False)[0]
+    convert_weights(model)                 # converts conv‑weights to fp32; returns None
+    load_net_param(model, clip_weights)    # your utility that loads the state_dict
+    model.eval()
     return model
+# --------------------------------------------------------------------
 
 # Preprocessing Function
 def img_tensor(img_path):

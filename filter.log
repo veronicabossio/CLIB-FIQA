@@ -1,0 +1,3 @@
+python: can't open file '/home/veronicabossio/CLIB-FIQA/filter_faces.py': [Errno 2] No such file or directory
+
+ERROR conda.cli.main_run:execute(49): `conda run python filter_faces.py` failed. (See above for error)
